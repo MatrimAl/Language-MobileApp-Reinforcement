@@ -1,4 +1,3 @@
-RL Language MVP — Kısa README
 
 Bu küçük proje, kullanıcılara seviye bazlı kelime soruları sunan ve PyTorch ile yazılmış bir DQN (Deep Q-Network) agent ile "kişiselleştirilmiş" zorluk seçen bir prototiptir.
 
