@@ -13,8 +13,10 @@ BASE_URL = "http://127.0.0.1:8000"
 # CLI: --auto to run automatic simulated responses, otherwise manual mode
 parser = argparse.ArgumentParser()
 parser.add_argument('--auto', action='store_true', help='Run in automatic mode (simulate answers)')
+parser.add_argument('--user', type=int, default=1, help='User ID (default: 1)')
 args = parser.parse_args()
 AUTO_MODE = args.auto
+USER_ID = args.user
 
 # Veri depolama
 max_points = 100
@@ -34,14 +36,25 @@ total_attempts = 0
 
 # Session başlat
 print("🚀 Session başlatılıyor...")
-response = requests.post(f"{BASE_URL}/session/start", json={"user_id": 1})
+response = requests.post(f"{BASE_URL}/session/start", json={"user_id": USER_ID})
 session_data = response.json()
 session_id = session_data['session_id']
-print(f"✅ Session ID: {session_id}\n")
+print(f"✅ Session ID: {session_id} (User ID: {USER_ID})\n")
 
 # Grafik kurulumu
 plt.style.use('seaborn-v0_8-darkgrid')
-fig, axes = plt.subplots(2, 3, figsize=(15, 8))
+fig = plt.figure(figsize=(18, 8))
+gs = fig.add_gridspec(2, 4, hspace=0.3, wspace=0.3)
+axes = [
+    fig.add_subplot(gs[0, 0]),  # Ödül
+    fig.add_subplot(gs[0, 1]),  # Loss
+    fig.add_subplot(gs[0, 2]),  # Accuracy
+    fig.add_subplot(gs[0, 3]),  # State tablo
+    fig.add_subplot(gs[1, 0]),  # Seviye dağılım
+    fig.add_subplot(gs[1, 1]),  # Seviye trend
+    fig.add_subplot(gs[1, 2]),  # Cevap süresi
+    fig.add_subplot(gs[1, 3]),  # State tablo (devam)
+]
 fig.suptitle('RL Agent Öğrenme İzleme Paneli', fontsize=14, fontweight='bold')
 
 # Interaction state for manual mode
@@ -140,57 +153,115 @@ def update_plot(frame):
     else:
         avg_rew = np.mean(list(data['reward']))
     data['avg_reward'].append(avg_rew)
+    
+    # Son state'i sakla
+    current_state = result.get('new_state', [])
 
     # Grafikleri temizle
-    for ax in axes.flat:
+    for ax in axes:
         ax.clear()
 
-    # 1. Ödül
-    axes[0, 0].plot(data['episode'], data['reward'], 'b-', alpha=0.3, label='Anlık Ödül')
-    axes[0, 0].plot(data['episode'], data['avg_reward'], 'r-', linewidth=2, label='Ortalama (20)')
-    axes[0, 0].set_title('Ödül İlerlemesi')
-    axes[0, 0].set_xlabel('Episode')
-    axes[0, 0].set_ylabel('Ödül')
-    axes[0, 0].legend()
+    # 1. Ödül (axes[0])
+    axes[0].plot(data['episode'], data['reward'], 'b-', alpha=0.3, label='Anlık Ödül')
+    axes[0].plot(data['episode'], data['avg_reward'], 'r-', linewidth=2, label='Ortalama (20)')
+    axes[0].set_title('Ödül İlerlemesi')
+    axes[0].set_xlabel('Episode')
+    axes[0].set_ylabel('Ödül')
+    axes[0].legend()
 
-    # 2. Loss
+    # 2. Loss (axes[1])
     if any(l > 0 for l in data['loss']):
-        axes[0, 1].plot(data['episode'], data['loss'], 'g-')
+        axes[1].plot(data['episode'], data['loss'], 'g-')
     else:
-        axes[0, 1].text(0.5, 0.5, 'Henüz yeterli veri yok (64+ deneyim gerekli)', ha='center', va='center')
-    axes[0, 1].set_title('Training Loss')
+        axes[1].text(0.5, 0.5, 'Henüz yeterli veri yok (64+ deneyim gerekli)', ha='center', va='center')
+    axes[1].set_title('Training Loss')
 
-    # 3. Accuracy
-    axes[0, 2].plot(data['episode'], data['accuracy'], 'purple')
-    axes[0, 2].axhline(y=0.5, color='gray', linestyle='--')
-    axes[0, 2].set_title('Başarı Oranı')
-    axes[0, 2].set_ylim([0,1])
+    # 3. Accuracy (axes[2])
+    axes[2].plot(data['episode'], data['accuracy'], 'purple')
+    axes[2].axhline(y=0.5, color='gray', linestyle='--')
+    axes[2].set_title('Başarı Oranı')
+    axes[2].set_ylim([0,1])
 
-    # 4. Seviye dağılım
+    # 4. State Parametreleri (Üst Tablo) (axes[3])
+    if len(current_state) == 13:
+        # State'i decode et
+        state_labels = [
+            f"A1 Acc: {current_state[0]:.2f}",
+            f"A2 Acc: {current_state[1]:.2f}",
+            f"B1 Acc: {current_state[2]:.2f}",
+            f"B2 Acc: {current_state[3]:.2f}",
+            f"C1 Acc: {current_state[4]:.2f}",
+            f"Moving Acc: {current_state[5]:.2f}",
+            f"Resp Time: {current_state[6]:.2f}",
+            f"Due Ratio: {current_state[7]:.2f}",
+            f"Target: {['A1','A2','B1','B2','C1'][current_state[8:].index(1.0)] if 1.0 in current_state[8:] else 'N/A'}"
+        ]
+        
+        # Tablo verisi hazırla (3 sütun x 3 satır)
+        table_data = []
+        for i in range(0, 9, 3):
+            table_data.append(state_labels[i:i+3])
+        
+        axes[3].axis('tight')
+        axes[3].axis('off')
+        table = axes[3].table(cellText=table_data, cellLoc='left', loc='center',
+                                  colWidths=[0.33, 0.33, 0.33])
+        table.auto_set_font_size(False)
+        table.set_fontsize(9)
+        table.scale(1, 2)
+        axes[3].set_title('State Vektörü')
+    else:
+        axes[3].text(0.5, 0.5, 'State bilgisi bekleniyor...', ha='center', va='center')
+        axes[3].axis('off')
+
+    # 5. Seviye dağılım (axes[4])
     level_names = ['A1','A2','B1','B2','C1']
     level_counts = [list(data['selected_level']).count(i) for i in range(5)]
-    axes[1, 0].bar(level_names, level_counts)
-    axes[1, 0].set_title('Seviye Seçim Dağılımı')
+    axes[4].bar(level_names, level_counts)
+    axes[4].set_title('Seviye Seçim Dağılımı')
 
-    # 5. Son 20 seviye trend
+    # 6. Son 20 seviye trend (axes[5])
     if len(data['selected_level'])>0:
         recent_levels = list(data['selected_level'])[-20:]
         recent_episodes = list(data['episode'])[-20:]
-        axes[1, 1].scatter(recent_episodes, recent_levels, c=recent_levels, cmap='viridis')
-        axes[1, 1].set_yticks([0,1,2,3,4]); axes[1,1].set_yticklabels(level_names)
-    axes[1, 1].set_title('Son 20 Episode - Seviye Trendi')
+        axes[5].scatter(recent_episodes, recent_levels, c=recent_levels, cmap='viridis')
+        axes[5].set_yticks([0,1,2,3,4]); axes[5].set_yticklabels(level_names)
+    axes[5].set_title('Son 20 Episode - Seviye Trendi')
 
-    # 6. Cevap süresi
-    axes[1, 2].plot(data['episode'], data['response_time'], 'orange')
-    axes[1, 2].axhline(y=6, color='red', linestyle='--')
-    axes[1, 2].set_title('Cevap Süresi (s)')
+    # 7. Cevap süresi (axes[6])
+    axes[6].plot(data['episode'], data['response_time'], 'orange')
+    axes[6].axhline(y=6, color='red', linestyle='--')
+    axes[6].set_title('Cevap Süresi (s)')
+    
+    # 8. State Parametreleri (Alt - Detaylı Bilgi) (axes[7])
+    if len(current_state) == 13:
+        info_lines = [
+            f"Episode: {episode_count}",
+            f"Doğruluk: {total_correct}/{total_attempts} ({100*total_correct/total_attempts if total_attempts > 0 else 0:.1f}%)",
+            f"Son Ödül: {result.get('reward', 0):.2f}",
+            f"Seçilen Seviye: {result.get('selected_level_name', 'N/A')}",
+            "",
+            "=== State Detayları ===",
+            f"A1-C1 Başarı: {current_state[0]:.2f}, {current_state[1]:.2f}, {current_state[2]:.2f}, {current_state[3]:.2f}, {current_state[4]:.2f}",
+            f"Hareketli Ort: {current_state[5]:.2f}",
+            f"Norm. Süre: {current_state[6]:.2f}",
+            f"Gecikmiş Oran: {current_state[7]:.2f}",
+            f"Hedef Seviye: {['A1','A2','B1','B2','C1'][current_state[8:].index(1.0)] if 1.0 in current_state[8:] else 'N/A'}"
+        ]
+        axes[7].text(0.05, 0.95, '\n'.join(info_lines), transform=axes[7].transAxes,
+                       verticalalignment='top', fontsize=9, family='monospace',
+                       bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
+        axes[7].axis('off')
+        axes[7].set_title('Detaylı Bilgi')
+    else:
+        axes[7].text(0.5, 0.5, 'Detaylı bilgi bekleniyor...', ha='center', va='center')
+        axes[7].axis('off')
 
-    # Bilgi metni
-    info_text = f"Episode: {episode_count} | Doğruluk: {total_correct}/{total_attempts} ({100*total_correct/total_attempts:.1f}%) | Son Ödül: {result['reward']:.2f}"
-    # temizle üst metinlar
-    for t in fig.texts:
-        t.set_visible(False)
-    fig.text(0.5, 0.96, info_text, ha='center', fontsize=10, bbox=dict(facecolor='wheat', alpha=0.6))
+    # tight_layout yerine constrained_layout kullan (tablo uyumlu)
+    try:
+        plt.tight_layout()
+    except:
+        pass  # Tablo varsa tight_layout bazen uyarı verir, görmezden gel
 
     # Konsola bilgi
     status = '✓' if result['correct'] else '✗'

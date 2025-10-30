@@ -7,12 +7,18 @@ def run():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     
-    # Kullanıcı oluştur
-    if not db.query(User).first():
-        u = User(target_level="B1")
-        db.add(u)
+    # Kullanıcılar oluştur
+    if not db.query(User).filter_by(id=1).first():
+        u1 = User(target_level="B1")
+        db.add(u1)
         db.commit()
-        print("✅ Kullanıcı oluşturuldu (hedef: B1)")
+        print("✅ User 1 oluşturuldu (hedef: B1)")
+    
+    if not db.query(User).filter_by(id=2).first():
+        u2 = User(target_level="A2")
+        db.add(u2)
+        db.commit()
+        print("✅ User 2 oluşturuldu (hedef: A2)")
     
     # CSV'den kelimeleri yükle
     if not db.query(Word).first():
@@ -76,12 +82,13 @@ def run():
         print(f"ℹ️ Kelimeler zaten yüklü ({word_count} kelime)")
     
     # Seviye istatistikleri oluştur
-    user = db.query(User).first()
+    users = db.query(User).all()
     stats_created = 0
-    for lv in LEVELS:
-        if not db.get(UserLevelStat, {"user_id": user.id, "level": lv}):
-            db.add(UserLevelStat(user_id=user.id, level=lv))
-            stats_created += 1
+    for user in users:
+        for lv in LEVELS:
+            if not db.get(UserLevelStat, {"user_id": user.id, "level": lv}):
+                db.add(UserLevelStat(user_id=user.id, level=lv))
+                stats_created += 1
     
     if stats_created > 0:
         db.commit()

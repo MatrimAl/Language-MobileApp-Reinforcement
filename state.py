@@ -54,8 +54,82 @@ def build_state(db: Session, user: User) -> list[float]:
 
 def compute_reward(correct: bool, word_level: str, target_level: str, due: bool, resp_ms: int) -> float:
     r = 1.0 if correct else 0.0
-    gap = level_idx(word_level) - level_idx(target_level)  # +1: bir üst seviye
-    diff_bonus = { -2:-0.1, -1:-0.05, 0:0.0, 1:0.2, 2:0.1 }.get(gap, -0.15)
+    
+    # Hedef seviyeye yakınlık bonusu (hedef = en yüksek bonus)
+    gap = abs(level_idx(word_level) - level_idx(target_level))
+    
+    # 0 fark (hedef) = +1.0 bonus (en yüksek)
+    # 1 fark (hedefin yanı) = +0.6 bonus
+    # 2 fark = +0.2 bonus
+    # 3+ fark = 0.0 bonus (çok uzak)
+    if gap == 0:
+        diff_bonus = 1.0    # Hedef seviye - EN YÜKSEK ÖDÜL
+    elif gap == 1:
+        diff_bonus = 0.6    # Bir alt/üst seviye - İYİ
+    elif gap == 2:
+        diff_bonus = 0.2    # İki seviye fark - KABUL EDİLEBİLİR
+    else:
+        diff_bonus = 0.0    # Çok uzak seviye - BONUS YOK
+    
     due_bonus  = 0.1 if (due and correct) else 0.0
     time_pen   = 0.0 if resp_ms <= 6000 else min(0.2, (resp_ms-6000)/20000)
-    return r + 0.2*diff_bonus + 0.1*due_bonus - 0.05*time_pen
+    
+    # Diff bonus katsayısını 0.2'den 0.5'e yükselttik (daha güçlü sinyal)
+    return r + 0.5 * diff_bonus + 0.1 * due_bonus - 0.05 * time_pen
+
+def adjust_target_level(db: Session, user: User, min_attempts: int = 20) -> bool:
+    """
+    Otomatik seviye ayarlama mekanizması.
+    
+    Kurallar:
+    - Hedef seviyede %75+ başarı + son 20'de %70+ → Seviye yükselt
+    - Hedef seviyede %40 altı başarı → Seviye düşür
+    - Minimum 20 deneme gerekli
+    
+    Returns:
+        True eğer seviye değiştiyse, False değilse
+    """
+    # Toplam deneme sayısını kontrol et
+    total_attempts = db.query(Attempt).filter(Attempt.user_id == user.id).count()
+    if total_attempts < min_attempts:
+        return False
+    
+    # Hedef seviyedeki performansı al
+    current_target = user.target_level
+    target_stat = db.get(UserLevelStat, {"user_id": user.id, "level": current_target})
+    
+    if target_stat is None:
+        return False
+    
+    # Hedef seviyedeki başarı oranı
+    total_at_target = target_stat.correct + target_stat.wrong
+    if total_at_target < 10:  # En az 10 deneme hedef seviyede olmalı
+        return False
+    
+    target_acc = target_stat.correct / total_at_target
+    
+    # Son 20 denemede genel başarı oranı
+    recent_acc = moving_accuracy(db, user.id, k=20)
+    
+    current_idx = level_idx(current_target)
+    new_level = None
+    
+    # YÜKSELTME KOŞULU: Hedef seviyede çok başarılı + genel de iyi
+    if target_acc >= 0.75 and recent_acc >= 0.70:
+        if current_idx < len(LEVELS) - 1:  # C1'den yukarı çıkamaz
+            new_level = LEVELS[current_idx + 1]
+            print(f"📈 Seviye yükseltme: {current_target} → {new_level} (Hedef acc: {target_acc:.1%}, Son 20: {recent_acc:.1%})")
+    
+    # DÜŞÜRME KOŞULU: Hedef seviyede zorlanıyor
+    elif target_acc < 0.40:
+        if current_idx > 0:  # A1'den aşağı inemez
+            new_level = LEVELS[current_idx - 1]
+            print(f"📉 Seviye düşürme: {current_target} → {new_level} (Hedef acc: {target_acc:.1%})")
+    
+    # Seviye değişikliği uygula
+    if new_level:
+        user.target_level = new_level
+        db.commit()
+        return True
+    
+    return False

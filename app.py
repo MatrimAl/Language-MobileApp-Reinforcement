@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from db import get_db, engine
 from model import Base, User, Word, UserWordStat, Attempt, UserLevelStat, LEVELS
-from state import build_state, compute_reward, level_idx
+from state import build_state, compute_reward, level_idx, adjust_target_level
 from selection import pick_from_bucket, pick_distractors
 from rl import AgentRegistry
 import uuid, random
@@ -14,6 +14,15 @@ Base.metadata.create_all(bind=engine)
 
 STATE_DIM = 13
 agent_registry = AgentRegistry(state_dim=STATE_DIM, n_actions=5)  # A1..C1
+session_states = {}  # session_id -> {"state": s, "action": a, "word_id": wid}
+
+@app.on_event("startup")
+async def startup_event():
+    """Startup'ta agent registry'yi yeniden oluştur (reload için)"""
+    global agent_registry, session_states
+    agent_registry = AgentRegistry(state_dim=STATE_DIM, n_actions=5)
+    session_states = {}
+    print(f"✅ Agent Registry yenilendi (state_dim={STATE_DIM})")
 
 class StartIn(BaseModel):  user_id: int
 class StartOut(BaseModel): session_id: str; state: list[float]; eps: float
@@ -48,6 +57,10 @@ def rl_next(user_id: int, session_id: str, db: Session = Depends(get_db)):
     st = db.get(UserWordStat, {"user_id": user.id, "word_id": w.id})
     if not st:
         db.add(UserWordStat(user_id=user.id, word_id=w.id)); db.commit()
+    
+    # Session state'ini sakla (feedback'te kullanılacak)
+    session_states[session_id] = {"state": s, "action": a, "word_id": w.id}
+    
     return {"question_id": qid, "word_id": w.id, "prompt": w.l2_text,
             "options": opts, "bucket_level": bucket_level, "action": a, "state": s}
 
@@ -87,13 +100,26 @@ def rl_answer(inp: AnswerIn, db: Session = Depends(get_db)):
     # ödül & yeni state
     due_flag = (st.due_at is None) or (st.last_seen >= st.due_at)
     r = compute_reward(correct, word.level, user.target_level, due_flag, inp.response_ms)
+    
+    # 🔄 Otomatik seviye ayarlama
+    level_changed = adjust_target_level(db, user)
+    
     s2 = build_state(db, user)
 
     # RL güncelleme
     agent = agent_registry.get(user.id)
-    # Not: pratikte s'i /rl/next’ten taşırsın; basitlik için burada tekrar hesaplamak yeterli olur.
-    s = build_state(db, user)
-    agent.push(s, int(inp.action), float(r), s2, False)
+    
+    # Session state'den s ve action'ı al (DÜZELT: yanlış state kullanılmasın)
+    if inp.session_id in session_states:
+        session_data = session_states[inp.session_id]
+        s = session_data["state"]
+        a = session_data["action"]
+    else:
+        # Fallback: state yoksa yeniden hesapla (ideal değil ama çökmesin)
+        s = build_state(db, user)
+        a = inp.action
+    
+    agent.push(s, int(a), float(r), s2, False)
     loss = agent.train_step()
     if agent.steps % 2000 == 0: agent.hard_update()
 

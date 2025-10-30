@@ -28,6 +28,11 @@ def pick_from_bucket(db: Session, user_id: int, bucket_level: str) -> Word:
         score = (1.0 - m) * (1.3 if due else 0.8) * (1.1 if reps < 3 else 1.0)
         scored.append((score, w))
     scored.sort(key=lambda x: x[0], reverse=True)
+    
+    if not scored:
+        # Hiç kelime yoksa hata
+        raise ValueError(f"No words found for level {bucket_level} or nearby levels!")
+    
     return scored[0][1]
 
 def pick_distractors(db: Session, target: Word, k=2):
