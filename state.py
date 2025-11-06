@@ -52,30 +52,34 @@ def build_state(db: Session, user: User) -> list[float]:
     t_one[level_idx(user.target_level)] = 1.0  # 5
     return accs + [mov, avg_ms_norm, due] + t_one  # toplam 13 özellik
 
+# state.py -> compute_reward
+
 def compute_reward(correct: bool, word_level: str, target_level: str, due: bool, resp_ms: int) -> float:
-    r = 1.0 if correct else 0.0
-    
-    # Hedef seviyeye yakınlık bonusu (hedef = en yüksek bonus)
-    gap = abs(level_idx(word_level) - level_idx(target_level))
-    
-    # 0 fark (hedef) = +1.0 bonus (en yüksek)
-    # 1 fark (hedefin yanı) = +0.6 bonus
-    # 2 fark = +0.2 bonus
-    # 3+ fark = 0.0 bonus (çok uzak)
+    base = 1.0 if correct else -0.15
+
+    t = level_idx(target_level)
+    a = level_idx(word_level)
+    gap = abs(a - t)
+
+    # Hedef yakınlığı: hedefte büyük, komşuda küçük
     if gap == 0:
-        diff_bonus = 1.0    # Hedef seviye - EN YÜKSEK ÖDÜL
+        diff = +0.80     # hedef
     elif gap == 1:
-        diff_bonus = 0.6    # Bir alt/üst seviye - İYİ
+        diff = +0.25     # komşu
     elif gap == 2:
-        diff_bonus = 0.2    # İki seviye fark - KABUL EDİLEBİLİR
+        diff = +0.10
     else:
-        diff_bonus = 0.0    # Çok uzak seviye - BONUS YOK
-    
-    due_bonus  = 0.1 if (due and correct) else 0.0
-    time_pen   = 0.0 if resp_ms <= 6000 else min(0.2, (resp_ms-6000)/20000)
-    
-    # Diff bonus katsayısını 0.2'den 0.5'e yükselttik (daha güçlü sinyal)
-    return r + 0.5 * diff_bonus + 0.1 * due_bonus - 0.05 * time_pen
+        diff = 0.00
+
+    # ALT seçim (hedefin altına inmek) için ekstra caydırma
+    below = max(0, t - a)         # a < t ise 1..4
+    diff -= 0.20 * below          # alt seviye seçime ceza
+
+    due_bonus = 0.10 if (due and correct) else 0.0
+    time_pen  = 0.0 if resp_ms <= 6000 else min(0.2, (resp_ms-6000)/20000)
+
+    return float(base + diff + due_bonus - 0.05*time_pen)
+
 
 def adjust_target_level(db: Session, user: User, min_attempts: int = 20) -> bool:
     """

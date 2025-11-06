@@ -64,8 +64,10 @@ last_result = None
 
 def get_next_word():
     """Agent'tan bir sonraki kelimeyi al"""
-    response = requests.get(f"{BASE_URL}/rl/next", 
-                           params={"user_id": 1, "session_id": session_id})
+    response = requests.get(
+        f"{BASE_URL}/rl/next",
+        params={"user_id": USER_ID, "session_id": session_id}
+    )
     return response.json()
 
 def submit_answer_by_index(word_data, selected_idx):
@@ -73,7 +75,7 @@ def submit_answer_by_index(word_data, selected_idx):
     opt = word_data['options'][selected_idx]
     response_ms = random.randint(1000, 6000)
     payload = {
-        "user_id": 1,
+        "user_id": USER_ID,
         "session_id": session_id,
         "question_id": word_data['question_id'],
         "word_id": word_data['word_id'],
