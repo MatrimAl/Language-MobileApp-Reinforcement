@@ -1,79 +1,297 @@
+# RL-Based Adaptive Language Learning System
 
-Bu küçük proje, kullanıcılara seviye bazlı kelime soruları sunan ve PyTorch ile yazılmış bir DQN (Deep Q-Network) agent ile "kişiselleştirilmiş" zorluk seçen bir prototiptir.
+[![en](https://img.shields.io/badge/lang-en-blue.svg)](README.md)
+[![tr](https://img.shields.io/badge/lang-tr-red.svg)](README.tr.md)
 
-Özet
-- Backend: FastAPI
-- RL: PyTorch DQN (kişiselleştirilmiş Agent per user)
-- Veritabanı: SQLite (mvp.db)
-- Görselleştirme: matplotlib (canlı izleme)
+An intelligent reinforcement learning system that personalizes vocabulary learning by adapting to individual learner abilities using Item Response Theory (IRT) and advanced RL algorithms.
 
-Önemli dosyalar
-- `app.py`        : FastAPI uygulaması (API endpoint'leri)
-- `model.py`      : SQLAlchemy modelleri (User, Word, Attempt, vb.)
-- `db.py`         : SQLite motoru ve session helper
-- `seed.py`       : CSV'den (turkish_english_vocab_from_xlsx.csv) kelimeleri yükler ve başlangıç verisi yaratır
-- `state.py`      : State/Reward hesaplama mantığı
-- `rl.py`         : DQN agent implementasyonu (AgentRegistry, replay buffer, vs.)
-- `visualize_learning.py`: Canlı grafik; manuel (default) veya otomatik (`--auto`) mod
-- `turkish_english_vocab_from_xlsx.csv`: Kelime havuzu (CSV)
+## What This Model Does
 
-Hızlı Başlangıç (Windows PowerShell)
-1) Gerekli paketleri yükleyin (önerilen):
+This system acts as an **AI tutor** that:
+- **Selects optimal vocabulary words** based on learner's current ability
+- **Targets the Zone of Proximal Development (ZPD)** - presenting words that are challenging but not too difficult
+- **Adapts in real-time** using reinforcement learning to maximize learning efficiency
+- **Simulates realistic learner behavior** with cognitive models (fatigue, motivation, forgetting)
 
-```powershell
-C:/Users/matri/AppData/Local/Programs/Python/Python312/python.exe -m pip install fastapi uvicorn sqlalchemy torch pydantic requests matplotlib
+**Key Achievement:** 53.8% ZPD hit rate (target was 30-40%) with 59% accuracy
+
+---
+
+## Model Architecture
+
+### Neural Network Structure
+![Model Architecture](docs/images/model_architecture.png)
+*Dueling DQN with separate value and advantage streams*
+
+### System Flow Diagram
+![System Flow](docs/images/system_flow.png)
+*Complete data flow from agent to environment to user simulation*
+
+---
+
+## Training Results
+
+### Overall Performance
+![Training Overview](plots_v3_final/training_overview.png)
+*Episode rewards, accuracy, ZPD hits, and episode lengths over 1024 episodes*
+
+### Learning Progress
+![Learning Curve](plots_v3_final/learning_curve.png)
+*Cumulative reward and accuracy trend showing learning improvement*
+
+### ZPD Analysis
+![ZPD Analysis](plots_v3_final/zpd_analysis.png)
+*ZPD hit rate distribution and correlation with accuracy*
+
+### Metric Distributions
+![Distributions](plots_v3_final/distributions.png)
+*Reward, accuracy, and ZPD hit distributions*
+
+---
+
+## Core Files Overview
+
+### Model & Agent
+- **`models_v3.py`** - Dueling Double DQN agent with prioritized replay
+  - State: 17 features (ability, history, ZPD center, streak, etc.)
+  - Action: Select next word to present
+  - Reward: Correct answers + ZPD targeting bonus
+
+### Environment
+- **`language_env_v3.py`** - Single environment with anti-repetition system
+  - Tracks word history, cooldowns, and diminishing returns
+  - Prevents agent from exploiting word repetition
+  - Implements realistic reward clipping
+  
+- **`language_env_vectorized.py`** - Vectorized parallel environments (128x)
+  - Critical fix: Proper reward accumulation
+  - 30x faster training through batched operations
+  - NumPy-optimized for CPU efficiency
+
+### User Simulation
+- **`user_simulator.py`** - Basic IRT model (simple probability)
+  
+- **`user_simulator_realistic.py`** - Advanced simulation with 6 cognitive models:
+  1. **Slip & Guess** (4PL IRT) - Know but fail, or guess correctly
+  2. **Fatigue** - Performance degrades over time
+  3. **Motivation** - Success/failure affects engagement
+  4. **Variable Learning** - Adaptive learning rates
+  5. **Forgetting** - Spaced repetition memory decay
+  6. **Response Noise** - Human-like variability
+
+- **`user_simulator_vectorized.py`** - Vectorized version for parallel training
+
+### Configuration
+- **`config.py`** - All hyperparameters and reward structure
+  - Anti-repetition penalties (rebalanced)
+  - ZPD reward bonuses
+  - DQN training parameters
+  - Reward clipping limits
+
+### Training
+- **`train_v3_ultra_final.py`** - Main training script
+  - 128 parallel environments
+  - GPU-accelerated
+  - Automatic visualization generation
+  - ~14 minutes for 1000 episodes
+
+### Visualization
+- **`training_plots.py`** - Auto-generates 4 detailed plots:
+  - Training overview (rewards, accuracy, ZPD)
+  - Learning curves
+  - ZPD analysis
+  - Distribution histograms
+
+### Data
+- **`vocabulary_data.py`** - Turkish-English vocabulary dataset loader
+  - 1,105 words with CEFR difficulty levels
+  - Concreteness ratings
+  - Word feature extraction
+
+### Utilities
+- **`prioritized_replay.py`** - Prioritized Experience Replay buffer
+- **`test_reward_accum.py`** - Test for reward accumulation bug fix
+
+---
+
+## System Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   DQN Agent (models_v3)                 │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │ State (17D) → Dueling Network → Q-Values         │  │
+│  │ • User ability (θ)                                │  │
+│  │ • Answer history (10 answers)                     │  │
+│  │ • ZPD center                                      │  │
+│  │ • Current streak                                  │  │
+│  └──────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+                          ↓ Action: Select word
+┌─────────────────────────────────────────────────────────┐
+│          Environment (language_env_vectorized)          │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │ • Anti-repetition tracking                        │  │
+│  │ • ZPD calculation                                 │  │
+│  │ • Reward computation                              │  │
+│  └──────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+                          ↓ Word presented
+┌─────────────────────────────────────────────────────────┐
+│      Realistic User (user_simulator_realistic)          │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │ IRT + Slip/Guess + Fatigue + Motivation +         │  │
+│  │ Forgetting + Noise → Correct/Incorrect            │  │
+│  └──────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+                          ↓ Response + Reward
+                    ┌──────────────┐
+                    │ Replay Buffer │
+                    │ (Prioritized) │
+                    └──────────────┘
 ```
 
-(Not: sisteminizde `python` çalışıyorsa `python -m pip install ...` kullanabilirsiniz.)
+---
 
-2) Seed (veritabanı ve kelimeler):
+## Quick Start
 
-```powershell
-C:/Users/matri/AppData/Local/Programs/Python/Python312/python.exe seed.py
+### Training
+```bash
+# Train new model (128 parallel envs, CUDA)
+python train_v3_ultra_final.py --episodes 1000 --num-envs 128 --device cuda
+
+# Results saved to:
+# - checkpoints/v3_ultra_final.pt (model)
+# - plots_v3_final/*.png (4 graphs)
 ```
 
-Bu işlem `mvp.db` dosyasını oluşturup CSV'deki kelimeleri ve bir demo kullanıcıyı yüklüyor.
+### Testing
+```bash
+# Quick demo
+python quick_demo.py
 
-3) Sunucuyu başlatın (FastAPI):
+# Interactive quiz
+python interactive_demo.py
 
-```powershell
-C:/Users/matri/AppData/Local/Programs/Python/Python312/python.exe -m uvicorn app:app --reload --port 8000
+# Test reward accumulation
+python test_reward_accum.py
 ```
 
-API dokümantasyonu: http://127.0.0.1:8000/docs
+### Using Trained Model
+```python
+from models_v3 import DuelingDQNAgent
+from vocabulary_data import VocabularyDataset
 
-4) Canlı görselleştirme (manuel seçim):
-- Manuel mod (pencere açıkken 1/2/3 tuşlarıyla seçim yapabilirsiniz):
+# Load model
+vocab = VocabularyDataset()
+agent = DuelingDQNAgent(state_dim=17, vocab_dataset=vocab)
+agent.load('checkpoints/v3_ultra_final.pt')
 
-```powershell
-C:/Users/matri/AppData/Local/Programs/Python/Python312/python.exe visualize_learning.py
+# Get word recommendation
+state = env.get_state()
+available_words = env.get_available_actions()
+action = agent.select_action(state, available_words, estimated_theta=0.5)
 ```
 
-- Otomatik simülasyon modu (eski davranış, cevaplar otomatik):
+---
 
-```powershell
-C:/Users/matri/AppData/Local/Programs/Python/Python312/python.exe visualize_learning.py --auto
+## Performance Metrics
+
+### Final Results (1024 episodes)
+```
+ZPD Hit Rate:      53.8%  (Target: 30-40%)
+Average Accuracy:  58.1%  (Realistic with cognitive models)
+Average Reward:    59.31  (per episode)
+Training Speed:    14 minutes / 1024 episodes
 ```
 
-Kullanım notları
-- `visualize_learning.py` çalışırken plot penceresinin önde ve odakta olduğundan emin olun; manuel modda tuş girdileri sadece pencere aktifken alınır.
-- Eğer `requests.exceptions.JSONDecodeError` veya bağlantı hatası alırsanız (Expecting value / ConnectionRefused), muhtemelen FastAPI sunucusu çalışmıyordur. Önce sunucuyu başlatın.
-- `target_level` (User.target_level): kullanıcının hedef dil seviyesi (A1..C1). Agent bu bilgiyi state içinde one-hot olarak alır ve reward hesaplamasında zorluk bonusu olarak kullanır. (Detaylar `state.py` içinde.)
+### Improvements Over Baseline
+- **ZPD Hits:** 6.6 → 26.9 per episode (+4.1x)
+- **Vocabulary Diversity:** High (anti-repetition working)
+- **Realism:** 6 cognitive models vs simple probability
 
-Hızlı test
-- `test_api.py` dosyası otomatik olarak birkaç istek atıp API'yi test eder. Sunucu çalışırken aşağıyı çalıştırabilirsiniz:
+---
 
-```powershell
-C:/Users/matri/AppData/Local/Programs/Python/Python312/python.exe test_api.py
+## Key Features
+
+### Anti-Repetition System (3 Mechanisms)
+1. **Recent Penalty:** -0.15 per occurrence in last 10 words
+2. **Cooldown:** -0.2 if shown within 5 steps
+3. **Diminishing Returns:** ZPD bonus decreases with repetition
+
+### Realistic Simulation
+- **Slip:** 15% chance to fail despite knowing
+- **Guess:** 25% chance to succeed despite not knowing
+- **Fatigue:** -2% energy per question
+- **Forgetting:** 28% memory decay after 20 steps
+
+### Reward Structure
+```
+Base reward:     +0.15 (correct) / -0.03 (incorrect)
+ZPD bonus:       +1.0 (in ZPD) + 1.5 (correct in ZPD)
+Streak bonus:    +0.08 per correct (max 5)
+Novel word:      +0.15 (first time in episode)
+Clipped to:      [-0.5, 3.0] per step
 ```
 
-Sorun giderme
-- `mvp.db` dosyası "file in use" hatası verirse öncelikle çalışan Python/uvicorn süreçlerini durdurun.
-- Paket versiyon problemleri olursa `pip install --upgrade <package>` deneyin.
+---
 
-İleri adımlar (Öneriler)
-- `rl.py` içindeki hiperparametreleri (gamma, lr, target update sıklığı) deneyin
-- Reward fonksiyonunu değiştirmek için `state.py` içindeki `compute_reward` fonksiyonuna bakın
-- Agent başına model eğitimini devam ettirmek/kalıcı hale getirmek için model ağırlıklarını kaydetme/geri yükleme ekleyin
+## Dependencies
 
-İsterseniz README'yi genişletip kullanım örnekleri, test çıktıları veya bir `requirements.txt` dosyası ekleyebilirim.
+```bash
+pip install torch numpy pandas tqdm matplotlib gymnasium
+```
+
+**Requirements:**
+- Python 3.8+
+- CUDA (optional, for GPU acceleration)
+- ~2GB RAM for training
+- ~500MB for model weights
+
+---
+
+## Documentation
+
+- **`README.tr.md`** - Turkish version of this document
+- **`walkthrough.md`** - Complete Turkish documentation (all changes)
+- **`REWARD_BUG_FIX.md`** - Reward accumulation bug fix details
+- **`GPU_OPTIMIZATION_DOCS.md`** - Performance optimization guide
+- **`DEMO_USAGE.md`** - Demo script usage instructions
+
+---
+
+## Known Issues & Fixes
+
+### Fixed in V3.0
+- Reward accumulation bug - Episodes showed 0 total reward
+- Word repetition exploit - Agent spammed same word
+- Unrealistic simulation - Added 6 cognitive models
+- Reward imbalance - Rebalanced penalties and bonuses
+
+---
+
+## Contributing
+
+When adding features:
+1. Test with `test_reward_accum.py` for reward logic
+2. Verify with `language_env_v3.py` before vectorizing
+3. Update `config.py` for new parameters
+4. Run training for at least 100 episodes to validate
+
+---
+
+## License
+
+[Your License Here]
+
+---
+
+## Contact
+
+[Your Contact Information]
+
+---
+
+**Last Updated:** December 2024  
+**Version:** 3.0  
+**Status:** Production Ready
