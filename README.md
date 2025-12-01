@@ -20,11 +20,11 @@ This system acts as an **AI tutor** that:
 ## Model Architecture
 
 ### Neural Network Structure
-![Model Architecture](docs/images/model_architecture.jpg)
+![Model Architecture](images/model_architecture.jpg)
 *Dueling DQN with separate value and advantage streams*
 
 ### System Flow Diagram
-![System Flow](docs/images/system_flow.jpg)
+![System Flow](images/system_flow.jpg)
 *Complete data flow from agent to environment to user simulation*
 
 ---
