@@ -205,12 +205,7 @@ Ortalama Ödül:         59.31  (episode başına)
 Eğitim Hızı:           14 dakika / 1024 episode
 ```
 
-### Baseline'a Göre İyileştirmeler
-- **ZPD İsabetleri:** 6.6 → 26.9 episode başına (+4.1x)
-- **Kelime Çeşitliliği:** Yüksek (anti-tekrar çalışıyor)
-- **Gerçekçilik:** 6 bilişsel model vs basit olasılık
 
----
 
 ## Ana Özellikler
 
@@ -260,38 +255,3 @@ pip install torch numpy pandas tqdm matplotlib gymnasium
 
 ---
 
-## Bilinen Sorunlar & Düzeltmeler
-
-### V3.0'da Düzeltildi
-- Ödül biriktirme hatası - Episode'lar 0 toplam ödül gösteriyordu
-- Kelime tekrarı istismarı - Agent aynı kelimeyi spam yapıyordu
-- Gerçekçi olmayan simülasyon - 6 bilişsel model eklendi
-- Ödül dengesizliği - Cezalar ve bonuslar yeniden dengelendi
-
----
-
-## Katkıda Bulunma
-
-Özellik eklerken:
-1. Ödül mantığı için `test_reward_accum.py` ile test edin
-2. Vektörize etmeden önce `language_env_v3.py` ile doğrulayın
-3. Yeni parametreler için `config.py`'yi güncelleyin
-4. Doğrulamak için en az 100 episode eğitim çalıştırın
-
----
-
-## Lisans
-
-[Lisansınız Buraya]
-
----
-
-## İletişim
-
-[İletişim Bilgileriniz]
-
----
-
-**Son Güncelleme:** Aralık 2024  
-**Versiyon:** 3.0  
-**Durum:** Üretime Hazır
