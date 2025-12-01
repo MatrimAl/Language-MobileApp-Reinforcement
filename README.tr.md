@@ -20,11 +20,11 @@ Bu sistem bir **yapay zeka öğretmeni** olarak:
 ## Model Mimarisi
 
 ### Sinir Ağı Yapısı
-![Model Mimarisi](docs/images/model_architecture.png)
+![Model Mimarisi](docs/images/model_architecture.jpg)
 *Ayrı değer ve avantaj akışlarına sahip Dueling DQN*
 
 ### Sistem Akış Diyagramı
-![Sistem Akışı](docs/images/system_flow.png)
+![Sistem Akışı](docs/images/system_flow.jpg)
 *Agent'tan environment'a ve kullanıcı simülasyonuna tam veri akışı*
 
 ---
