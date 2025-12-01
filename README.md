@@ -205,12 +205,6 @@ Average Reward:    59.31  (per episode)
 Training Speed:    14 minutes / 1024 episodes
 ```
 
-### Improvements Over Baseline
-- **ZPD Hits:** 6.6 → 26.9 per episode (+4.1x)
-- **Vocabulary Diversity:** High (anti-repetition working)
-- **Realism:** 6 cognitive models vs simple probability
-
----
 
 ## Key Features
 
@@ -260,38 +254,5 @@ pip install torch numpy pandas tqdm matplotlib gymnasium
 
 ---
 
-## Known Issues & Fixes
 
-### Fixed in V3.0
-- Reward accumulation bug - Episodes showed 0 total reward
-- Word repetition exploit - Agent spammed same word
-- Unrealistic simulation - Added 6 cognitive models
-- Reward imbalance - Rebalanced penalties and bonuses
 
----
-
-## Contributing
-
-When adding features:
-1. Test with `test_reward_accum.py` for reward logic
-2. Verify with `language_env_v3.py` before vectorizing
-3. Update `config.py` for new parameters
-4. Run training for at least 100 episodes to validate
-
----
-
-## License
-
-[Your License Here]
-
----
-
-## Contact
-
-[Your Contact Information]
-
----
-
-**Last Updated:** December 2024  
-**Version:** 3.0  
-**Status:** Production Ready
